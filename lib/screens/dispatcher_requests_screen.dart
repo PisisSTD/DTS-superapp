@@ -8,7 +8,7 @@ import 'profile_screen.dart';
 class DispatcherRequestsScreen extends StatefulWidget {
   final AppUser currentUser;
 
-  DispatcherRequestsScreen({required this.currentUser});
+  const DispatcherRequestsScreen({super.key, required this.currentUser});
 
   @override
   _DispatcherRequestsScreenState createState() => _DispatcherRequestsScreenState();
@@ -22,26 +22,59 @@ class _DispatcherRequestsScreenState extends State<DispatcherRequestsScreen> {
     'Все', 'отправлено', 'принято', 'транспорт выделен', 'отклонено', 'выполнено'
   ];
 
-  // Вызов диалога для смены статуса
+  Future<void> _confirmSignOut() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Выход'),
+        content: const Text('Вы уверены, что хотите выйти из панели диспетчера?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Выйти'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _service.signOut();
+      if (mounted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+      }
+    }
+  }
+
   void _changeStatus(TransportRequest request) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Изменить статус'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _filterOptions.where((s) => s != 'Все').map((status) {
-            return ListTile(
-              title: Text(status),
-              onTap: () async {
-                Navigator.pop(context);
-                await _service.updateRequestStatus(request.id, status);
-                ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Статус изменен на "$status"'))
-                );
-              },
-            );
-          }).toList(),
+        title: const Text('Сменить статус'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _filterOptions.where((s) => s != 'Все').map((status) {
+              bool isCurrent = request.status == status;
+              return ListTile(
+                title: Text(status, style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
+                trailing: isCurrent ? const Icon(Icons.check, color: Colors.green) : null,
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _service.updateRequestStatus(request.id, status);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Статус изменен на "$status"'),
+                          backgroundColor: TransportRequest.getStatusColor(status),
+                        )
+                    );
+                  }
+                },
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -50,89 +83,127 @@ class _DispatcherRequestsScreenState extends State<DispatcherRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Панель диспетчера'),
         actions: [
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(currentUser: widget.currentUser),
-                ),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(currentUser: widget.currentUser)));
             },
           ),
           IconButton(
             icon: const Icon(Icons.exit_to_app),
-            onPressed: () async {
-              await _service.signOut();
-              Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-            },
+            onPressed: _confirmSignOut,
           )
         ],
       ),
       body: Column(
         children: [
-          // Фильтр по статусам
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          Container(
+            padding: const EdgeInsets.all(16.0),
+            color: Colors.blue[50],
             child: DropdownButtonFormField<String>(
               value: _statusFilter,
               decoration: const InputDecoration(
                 labelText: 'Фильтр по статусу',
                 border: OutlineInputBorder(),
+                fillColor: Colors.white,
+                filled: true,
               ),
               items: _filterOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
               onChanged: (val) => setState(() => _statusFilter = val!),
             ),
           ),
-
-          // Список заявок
           Expanded(
             child: StreamBuilder<List<TransportRequest>>(
               stream: _service.getAllRequests(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                if (snapshot.hasError) {
+                  return Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'НУЖЕН ИНДЕКС FIRESTORE',
+                            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Зажмите текст ниже, чтобы выделить и скопировать ссылку для настройки базы:',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 15),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.red, width: 2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: SelectableText(
+                              '${snapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.black, fontSize: 13, fontFamily: 'monospace'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                 }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('Нет заявок'));
-                }
-
-                // Применяем фильтр
-                var filteredRequests = snapshot.data!;
+                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                
+                var requests = snapshot.data ?? [];
                 if (_statusFilter != 'Все') {
-                  filteredRequests = filteredRequests.where((r) => r.status == _statusFilter).toList();
+                  requests = requests.where((r) => r.status == _statusFilter).toList();
                 }
 
-                if (filteredRequests.isEmpty) {
-                  return const Center(child: Text('По этому фильтру ничего не найдено'));
+                if (requests.isEmpty) {
+                  return const Center(child: Text('Заявок не найдено', style: TextStyle(color: Colors.grey)));
                 }
 
                 return ListView.builder(
-                  itemCount: filteredRequests.length,
+                  padding: const EdgeInsets.all(8),
+                  itemCount: requests.length,
                   itemBuilder: (context, index) {
-                    final req = filteredRequests[index];
+                    final req = requests[index];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey.shade200),
+                      ),
+                      margin: const EdgeInsets.symmetric(vertical: 6),
                       child: ListTile(
-                        title: Text('${req.transportType} - ${req.date}'),
-                        subtitle: Text('От: ${req.userEmail}\nСтатус: ${req.status}'),
+                        title: Text(req.transportType, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('От: ${req.userEmail}\nДата: ${req.date}'),
                         isThreeLine: true,
-                        trailing: ElevatedButton(
-                          onPressed: () => _changeStatus(req),
-                          child: const Text('Статус'),
+                        trailing: IntrinsicWidth(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton(
+                                onPressed: () => _changeStatus(req),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: TransportRequest.getStatusColor(req.status),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  minimumSize: const Size(80, 36),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                child: Text(req.status, style: const TextStyle(fontSize: 11)),
+                              ),
+                            ],
+                          ),
                         ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => RequestDetailScreen(request: req),
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RequestDetailScreen(request: req))),
                       ),
                     );
                   },

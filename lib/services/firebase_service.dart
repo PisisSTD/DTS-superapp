@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/app_models.dart';
 
 class FirebaseService {
@@ -42,19 +43,36 @@ class FirebaseService {
 
   // Создание заявки
   Future<void> createRequest(TransportRequest request) async {
-    await _db.collection('requests').add(request.toMap());
+    // Явно указываем серверное время при создании
+    final data = request.toMap();
+    await _db.collection('requests').add(data);
   }
 
   // Стримы для списков
   Stream<List<TransportRequest>> getUserRequests() {
-    String uid = _auth.currentUser!.uid;
-    return _db.collection('requests').where('userId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true).snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => TransportRequest.fromFirestore(doc)).toList());
+    User? user = _auth.currentUser;
+    if (user == null) return Stream.value([]);
+    
+    if (kDebugMode) {
+      print("DEBUG: Загрузка заявок для UID: ${user.uid}");
+    }
+
+    return _db.collection('requests')
+        .where('userId', isEqualTo: user.uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          if (kDebugMode) {
+            print("DEBUG: Получено заявок: ${snapshot.docs.length}");
+          }
+          return snapshot.docs.map((doc) => TransportRequest.fromFirestore(doc)).toList();
+        });
   }
 
   Stream<List<TransportRequest>> getAllRequests() {
-    return _db.collection('requests').orderBy('createdAt', descending: true).snapshots()
+    return _db.collection('requests')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => TransportRequest.fromFirestore(doc)).toList());
   }
 
@@ -63,11 +81,9 @@ class FirebaseService {
     await _db.collection('requests').doc(requestId).update({'status': newStatus});
   }
 
-  // Новый метод для настройки уведомлений
+  // Настройка уведомлений
   Future<void> setupPushNotifications() async {
     FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    // 1. Запрашиваем права у пользователя (появится системное окошко)
     NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -75,17 +91,12 @@ class FirebaseService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('Пользователь разрешил уведомления');
-
-      // 2. Получаем уникальный токен этого устройства
       String? token = await messaging.getToken();
-
       if (token != null) {
-        // 3. Сохраняем токен в документ текущего пользователя в коллекции 'users'
         String uid = _auth.currentUser!.uid;
         await _db.collection('users').doc(uid).set(
           {'fcmToken': token},
-          SetOptions(merge: true) // merge: true обновляет документ, не удаляя старые поля
+          SetOptions(merge: true)
         );
       }
     }

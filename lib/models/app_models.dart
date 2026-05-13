@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class AppUser {
   final String uid;
@@ -66,12 +67,31 @@ class TransportRequest {
 
   Map<String, dynamic> toMap() {
     return {
-      'userId': userId, 'userEmail': userEmail, 'transportType': transportType,
-      'date': date, 'timeStart': timeStart, 'duration': duration,
-      'purpose': purpose, 'route': route, 'department': department,
-      'comment': comment, 'status': status,
+      'userId': userId, 
+      'userEmail': userEmail, 
+      'transportType': transportType,
+      'date': date, 
+      'timeStart': timeStart, 
+      'duration': duration,
+      'purpose': purpose, 
+      'route': route, 
+      'department': department,
+      'comment': comment, 
+      'status': status,
       'signatureTimestamp': signatureTimestamp ?? FieldValue.serverTimestamp(),
       'createdAt': createdAt ?? FieldValue.serverTimestamp(),
     };
+  }
+
+  // Хелпер для получения цвета статуса
+  static Color getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'отправлено': return Colors.blue;
+      case 'принято': return Colors.green;
+      case 'отклонено': return Colors.red;
+      case 'транспорт выделен': return Colors.orange;
+      case 'выполнено': return Colors.grey;
+      default: return Colors.black;
+    }
   }
 }

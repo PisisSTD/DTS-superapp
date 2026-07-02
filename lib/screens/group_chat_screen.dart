@@ -10,6 +10,8 @@ import 'package:record/record.dart';
 import '../services/firebase_service.dart';
 import '../models/app_models.dart';
 import 'video_circle_recorder.dart';
+import '../widgets/circle_video_player.dart';
+import '../widgets/voice_message_player.dart';
 
 class GroupChatScreen extends StatefulWidget {
   final ChatGroup group;
@@ -21,6 +23,7 @@ class GroupChatScreen extends StatefulWidget {
 
 class _GroupChatScreenState extends State<GroupChatScreen> {
   final _messageCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
   final _service = FirebaseService();
   final _picker = ImagePicker();
   final _audioRecorder = AudioRecorder();
@@ -29,11 +32,40 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   late Stream<List<ChatMessage>> _messageStream;
   bool _isUploading = false;
   bool _isRecordingVoice = false;
+  int _limit = 45;
 
   @override
   void initState() {
     super.initState();
-    _messageStream = _service.getGroupMessages(widget.group.id);
+    _updateStream();
+    _scrollCtrl.addListener(_scrollListener);
+  }
+
+  void _updateStream() {
+    setState(() {
+      _messageStream = _service.getGroupMessages(widget.group.id, limit: _limit);
+    });
+  }
+
+  void _scrollListener() {
+    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  void _loadMore() {
+    setState(() {
+      _limit += 45;
+      _messageStream = _service.getGroupMessages(widget.group.id, limit: _limit);
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    _scrollCtrl.dispose();
+    _audioRecorder.dispose();
+    super.dispose();
   }
 
   // --- ЛОГИКА ОТПРАВКИ ---
@@ -71,16 +103,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     final path = await _audioRecorder.stop();
     setState(() => _isRecordingVoice = false);
     if (path != null) _uploadAndSendMedia(File(path), 'voice');
-  }
-
-  // --- ВИДЕО-КРУЖКИ ---
-
-  void _openCircleRecorder() async {
-    final File? videoFile = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const VideoCircleRecorder()),
-    );
-    if (videoFile != null) _uploadAndSendMedia(videoFile, 'circle');
   }
 
   // --- СКАЧИВАНИЕ ---
@@ -122,6 +144,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               builder: (context, snapshot) {
                 final messages = snapshot.data ?? [];
                 return ListView.builder(
+                  controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length,
@@ -158,6 +181,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               bottomRight: isMe ? const Radius.circular(0) : const Radius.circular(12),
               bottomLeft: !isMe ? const Radius.circular(0) : const Radius.circular(12),
             ),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2)],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,13 +189,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               if (!isMe) Text(msg.senderName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
               if (msg.replyTo != null) _buildReplyBadge(msg.replyTo!),
               _buildMediaContent(msg),
-              if (decryptedText.isNotEmpty) SelectableText(decryptedText, style: const TextStyle(color: Colors.black87)),
+              if (decryptedText.isNotEmpty) SelectableText(decryptedText, style: const TextStyle(color: Colors.black, fontSize: 15)),
               const SizedBox(height: 4),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(time, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-                  if (msg.type != 'text') IconButton(icon: const Icon(Icons.download, size: 16), onPressed: () => _downloadFile(msg.mediaUrl!, msg.type), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  if (msg.type != 'text' && msg.type != 'voice') IconButton(icon: const Icon(Icons.download, size: 16), onPressed: () => _downloadFile(msg.mediaUrl!, msg.type), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                 ],
               ),
             ],
@@ -183,8 +207,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Widget _buildMediaContent(ChatMessage msg) {
     if (msg.type == 'image') return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(msg.mediaUrl!));
-    if (msg.type == 'circle') return Container(width: 150, height: 150, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black12), child: const Icon(Icons.play_circle_fill, size: 50, color: Colors.white));
-    if (msg.type == 'voice') return const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.mic, size: 16), Text(' Голосовое сообщение', style: TextStyle(fontSize: 13))]);
+    if (msg.type == 'circle') return CircleVideoPlayer(url: msg.mediaUrl!);
+    if (msg.type == 'voice') return VoiceMessagePlayer(url: msg.mediaUrl!);
     if (msg.type == 'video') return Container(height: 150, width: double.infinity, color: Colors.black12, child: const Icon(Icons.videocam, color: Colors.white));
     return const SizedBox.shrink();
   }
@@ -194,7 +218,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(color: Colors.black.withOpacity(0.05), borderRadius: BorderRadius.circular(6), border: const Border(left: BorderSide(color: Colors.blueGrey, width: 3))),
-      child: Text(_service.decryptMessage(reply['text'], widget.group.id), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+      child: Text(_service.decryptMessage(reply['text'] ?? '', widget.group.id), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
     );
   }
 
@@ -210,23 +234,29 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               padding: const EdgeInsets.all(8.0),
               child: Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: _showMediaMenu),
+                  IconButton(icon: const Icon(Icons.add_circle_outline, color: Colors.blueGrey), onPressed: _showMediaMenu),
                   Expanded(
-                    child: TextField(
-                      controller: _messageCtrl,
-                      keyboardType: TextInputType.multiline,
-                      maxLines: 5,
-                      minLines: 1,
-                      style: const TextStyle(color: Colors.black),
-                      decoration: InputDecoration(hintText: 'Сообщение в группу...', filled: true, fillColor: const Color(0xFFF5F6F7), border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),
+                    child: Container(
+                      decoration: BoxDecoration(color: const Color(0xFFF5F6F7), borderRadius: BorderRadius.circular(24)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TextField(
+                        controller: _messageCtrl,
+                        keyboardType: TextInputType.multiline,
+                        maxLines: 5, minLines: 1,
+                        style: const TextStyle(color: Colors.black),
+                        decoration: const InputDecoration(hintText: 'Сообщение в группу...', border: InputBorder.none),
+                      ),
                     ),
                   ),
-                  IconButton(icon: const Icon(Icons.videocam_outlined, color: Colors.blueGrey), onPressed: _openCircleRecorder),
+                  IconButton(icon: const Icon(Icons.videocam_outlined, color: Colors.blueGrey), onPressed: () async {
+                    final file = await Navigator.push(context, MaterialPageRoute(builder: (_) => const VideoCircleRecorder()));
+                    if (file != null) _uploadAndSendMedia(file, 'circle');
+                  }),
                   GestureDetector(
                     onLongPress: _startVoiceRecord,
                     onLongPressUp: _stopVoiceRecord,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                      padding: const EdgeInsets.all(8.0),
                       child: Icon(Icons.mic, color: _isRecordingVoice ? Colors.red : Colors.blueGrey),
                     ),
                   ),
@@ -257,13 +287,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   void _showMediaMenu() {
     showModalBottomSheet(context: context, builder: (context) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      ListTile(leading: const Icon(Icons.image), title: const Text('Фото'), onTap: () { Navigator.pop(context); _pickImage(); }),
-      ListTile(leading: const Icon(Icons.videocam), title: const Text('Видео'), onTap: () { Navigator.pop(context); _pickVideo(); }),
-      ListTile(leading: const Icon(Icons.file_present), title: const Text('Файл'), onTap: () { Navigator.pop(context); _pickFile(); }),
+      ListTile(leading: const Icon(Icons.image), title: const Text('Фото'), onTap: () async { Navigator.pop(context); final img = await _picker.pickImage(source: ImageSource.gallery); if (img != null) _uploadAndSendMedia(File(img.path), 'image'); }),
+      ListTile(leading: const Icon(Icons.videocam), title: const Text('Видео'), onTap: () async { Navigator.pop(context); final vid = await _picker.pickVideo(source: ImageSource.gallery); if (vid != null) _uploadAndSendMedia(File(vid.path), 'video'); }),
+      ListTile(leading: const Icon(Icons.file_present), title: const Text('Файл'), onTap: () async { Navigator.pop(context); final res = await FilePicker.pickFiles(); if (res != null) _uploadAndSendMedia(File(res.files.single.path!), 'file'); }),
     ])));
   }
-
-  void _pickImage() async { final XFile? img = await _picker.pickImage(source: ImageSource.gallery); if (img != null) _uploadAndSendMedia(File(img.path), 'image'); }
-  void _pickVideo() async { final XFile? vid = await _picker.pickVideo(source: ImageSource.gallery); if (vid != null) _uploadAndSendMedia(File(vid.path), 'video'); }
-  void _pickFile() async { final res = await FilePicker.pickFiles(); if (res != null) _uploadAndSendMedia(File(res.files.single.path!), 'file'); }
 }

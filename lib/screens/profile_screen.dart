@@ -7,7 +7,7 @@ class ProfileScreen extends StatelessWidget {
   final AppUser currentUser;
   final FirebaseService _service = FirebaseService();
 
-  ProfileScreen({Key? key, required this.currentUser}) : super(key: key);
+  ProfileScreen({super.key, required this.currentUser});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +48,7 @@ class ProfileScreen extends StatelessWidget {
               // Карточка с информацией (Material 3 Card)
               Card(
                 elevation: 0,
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),

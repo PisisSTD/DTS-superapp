@@ -5,7 +5,7 @@ import '../models/app_models.dart';
 class RequestDetailScreen extends StatelessWidget {
   final TransportRequest request;
 
-  const RequestDetailScreen({Key? key, required this.request}) : super(key: key);
+  const RequestDetailScreen({super.key, required this.request});
 
   // Вспомогательный метод для форматирования даты и времени из Timestamp
   String _formatDateTime(dynamic timestamp) {

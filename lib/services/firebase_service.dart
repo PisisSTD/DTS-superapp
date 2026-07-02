@@ -97,18 +97,17 @@ class FirebaseService {
     for (var doc in messages.docs) { await doc.reference.update({'isRead': true}); }
   }
 
-  Stream<List<ChatMessage>> getMessages(String receiverId) {
+  Stream<List<ChatMessage>> getMessages(String receiverId, {int limit = 45}) {
     final String chatId = getChatId(currentUserUid, receiverId);
     return _db.collection('chats').doc(chatId).collection('messages')
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((sn) => sn.docs.map((doc) => ChatMessage.fromFirestore(doc)).toList());
   }
 
   // Групповые сообщения
-  // --- ДОБАВЬ ЭТОТ МЕТОД В КЛАСС FIREBASE_SERVICE ---
   Future<void> createGroup(String groupName, List<String> memberIds) async {
-    // Добавляем текущего пользователя (создателя) в список участников, если его там нет
     if (!memberIds.contains(currentUserUid)) {
       memberIds.add(currentUserUid);
     }
@@ -122,6 +121,7 @@ class FirebaseService {
       'lastMessageTime': FieldValue.serverTimestamp(),
     });
   }
+
   Future<void> sendGroupMessage(String groupId, String text, {String type = 'text', String? mediaUrl, Map<String, dynamic>? replyTo}) async {
     final senderDoc = await _db.collection('users').doc(currentUserUid).get();
     final String senderName = senderDoc.get('fullName') ?? 'Сотрудник';
@@ -142,11 +142,34 @@ class FirebaseService {
       'lastMessage': type == 'text' ? encryptedText : '[Медиа]', 
       'lastMessageTime': FieldValue.serverTimestamp()
     });
+
+    _sendNotificationToGroup(groupId, currentUserUid, senderName, type);
   }
 
-  Stream<List<ChatMessage>> getGroupMessages(String groupId) {
+  void _sendNotificationToGroup(String groupId, String senderId, String senderName, String type) async {
+    final groupDoc = await _db.collection('groups').doc(groupId).get();
+    if (!groupDoc.exists) return;
+
+    final String groupName = groupDoc.get('name') ?? 'Группа';
+    final List<dynamic> members = groupDoc.get('members') ?? [];
+
+    for (var memberId in members) {
+      if (memberId == senderId) continue;
+      final memberDoc = await _db.collection('users').doc(memberId.toString()).get();
+      if (memberDoc.exists) {
+        final token = memberDoc.data()?['fcmToken'];
+        if (token != null) {
+          String actionText = type == 'text' ? 'отправил(а) сообщение' : 'отправил(а) медиафайл';
+          await _sendPushV1(token, groupName, "$senderName $actionText в $groupName");
+        }
+      }
+    }
+  }
+
+  Stream<List<ChatMessage>> getGroupMessages(String groupId, {int limit = 45}) {
     return _db.collection('groups').doc(groupId).collection('messages')
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map((sn) => sn.docs.map((doc) => ChatMessage.fromFirestore(doc)).toList());
   }

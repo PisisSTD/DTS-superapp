@@ -94,7 +94,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   }
 
   Future<String?> _showSignatureDialog() {
-    TextEditingController _passCtrl = TextEditingController();
+    TextEditingController passCtrl = TextEditingController();
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -117,7 +117,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
               const Text('Для подтверждения заявки введите ваш текущий пароль.'),
               const SizedBox(height: 15),
               TextField(
-                controller: _passCtrl,
+                controller: passCtrl,
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Пароль от аккаунта',
@@ -131,7 +131,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, _passCtrl.text),
+            onPressed: () => Navigator.pop(context, passCtrl.text),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue, 
               foregroundColor: Colors.white,
@@ -169,7 +169,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
                   child: Column(
                     children: [
                       DropdownButtonFormField<String>(
-                        value: _transportType,
+                        initialValue: _transportType,
                         items: _transportTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                         onChanged: (val) => setState(() => _transportType = val!),
                         decoration: const InputDecoration(

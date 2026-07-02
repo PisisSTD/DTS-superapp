@@ -116,7 +116,7 @@ class _DispatcherRequestsScreenState extends State<DispatcherRequestsScreen> {
             padding: const EdgeInsets.all(16.0),
             color: Colors.blue[50],
             child: DropdownButtonFormField<String>(
-              value: _statusFilter,
+              initialValue: _statusFilter,
               decoration: const InputDecoration(
                 labelText: 'Фильтр по статусу',
                 border: OutlineInputBorder(),

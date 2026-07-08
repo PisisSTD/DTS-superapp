@@ -33,6 +33,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   bool _isUploading = false;
   bool _isRecordingVoice = false;
   int _limit = 45;
+  bool _isFetching = false;
 
   @override
   void initState() {
@@ -54,10 +55,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _loadMore() {
+    if (_isFetching) return;
+    _isFetching = true;
     setState(() {
       _limit += 45;
-      _messageStream = _service.getGroupMessages(widget.group.id, limit: _limit);
+      _updateStream();
     });
+    Future.delayed(const Duration(milliseconds: 500), () => _isFetching = false);
   }
 
   @override
@@ -108,13 +112,29 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   // --- СКАЧИВАНИЕ ---
 
   Future<void> _downloadFile(String url, String type) async {
-    await Permission.storage.request();
+    if (Platform.isAndroid) await Permission.storage.request();
+    
     try {
-      final dir = await getExternalStorageDirectory();
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
+      } else {
+        dir = await getApplicationDocumentsDirectory();
+      }
+
       final String ext = type == 'image' ? 'jpg' : (type == 'video' || type == 'circle' ? 'mp4' : 'file');
       final savePath = "${dir!.path}/UVZ_Group_${DateTime.now().millisecondsSinceEpoch}.$ext";
+      
       await Dio().download(url, savePath);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Сохранено: $savePath'), backgroundColor: Colors.green));
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(Platform.isIOS ? 'Сохранено в Файлы' : 'Сохранено: $savePath'), 
+            backgroundColor: Colors.green
+          )
+        );
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка скачивания')));
     }
@@ -195,7 +215,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(time, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-                  if (msg.type != 'text' && msg.type != 'voice') IconButton(icon: const Icon(Icons.download, size: 16), onPressed: () => _downloadFile(msg.mediaUrl!, msg.type), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                  if (msg.type != 'text' && msg.type != 'voice') 
+                    IconButton(
+                      icon: const Icon(Icons.download, size: 16), 
+                      onPressed: () => _downloadFile(msg.mediaUrl!, msg.type), 
+                      padding: EdgeInsets.zero, 
+                      constraints: const BoxConstraints()
+                    ),
                 ],
               ),
             ],
@@ -256,7 +282,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     onLongPress: _startVoiceRecord,
                     onLongPressUp: _stopVoiceRecord,
                     child: Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
                       child: Icon(Icons.mic, color: _isRecordingVoice ? Colors.red : Colors.blueGrey),
                     ),
                   ),

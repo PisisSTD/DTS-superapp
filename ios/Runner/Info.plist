@@ -45,5 +45,24 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- ПЕРЕВОД: РАЗРЕШЕНИЯ ДЛЯ МЕДИА-МОНСТРА -->
+	<key>NSCameraUsageDescription</key>
+	<string>Приложению требуется доступ к камере для записи видео-кружков и отправки фото.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Приложению требуется доступ к микрофону для записи голосовых сообщений и видео.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Приложению требуется доступ к галерее для выбора фотографий и видео.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Приложению требуется доступ к медиатеке для работы с аудиофайлами.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>

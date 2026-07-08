@@ -38,8 +38,8 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer> {
   Widget build(BuildContext context) {
     if (!_isInitialized) {
       return Container(
-        width: 150,
-        height: 150,
+        width: 300,
+        height: 300,
         decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black12),
         child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       );
@@ -58,8 +58,8 @@ class _CircleVideoPlayerState extends State<CircleVideoPlayer> {
         });
       },
       child: Container(
-        width: 150,
-        height: 150,
+        width: 300,
+        height: 300,
         decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black),
         child: ClipOval(
           child: Stack(

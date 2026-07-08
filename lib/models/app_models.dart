@@ -9,6 +9,7 @@ class AppUser {
   final String fullName;
   final String status;
   final Timestamp? lastSeen;
+  final String? fcmToken;
 
   AppUser({
     required this.uid, 
@@ -18,6 +19,7 @@ class AppUser {
     required this.fullName,
     this.status = 'offline',
     this.lastSeen,
+    this.fcmToken,
   });
 
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
@@ -30,6 +32,7 @@ class AppUser {
       fullName: data['fullName'] ?? '',
       status: data['status'] ?? 'offline',
       lastSeen: data['lastSeen'],
+      fcmToken: data['fcmToken'],
     );
   }
 }
@@ -177,7 +180,6 @@ class TransportRequest {
     };
   }
 
-  // Метод получения цвета (сделаем статическим для удобства вызова)
   static Color getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'отправлено': return Colors.blue;
@@ -187,5 +189,40 @@ class TransportRequest {
       case 'выполнено': return Colors.grey;
       default: return Colors.black;
     }
+  }
+}
+
+enum CallStatus { dialing, ringing, active, rejected, missed, ended }
+
+class CallSession {
+  final String id;
+  final String callerId;
+  final String callerName;
+  final String receiverId;
+  final CallStatus status;
+  final bool isVideo;
+  final Timestamp createdAt;
+
+  CallSession({
+    required this.id,
+    required this.callerId,
+    required this.callerName,
+    required this.receiverId,
+    required this.status,
+    this.isVideo = false,
+    required this.createdAt,
+  });
+
+  factory CallSession.fromFirestore(DocumentSnapshot doc) {
+    Map data = doc.data() as Map<String, dynamic>;
+    return CallSession(
+      id: doc.id,
+      callerId: data['callerId'] ?? '',
+      callerName: data['callerName'] ?? '',
+      receiverId: data['receiverId'] ?? '',
+      status: CallStatus.values.firstWhere((e) => e.toString().split('.').last == data['status'], orElse: () => CallStatus.ended),
+      isVideo: data['isVideo'] ?? false,
+      createdAt: data['createdAt'] ?? Timestamp.now(),
+    );
   }
 }

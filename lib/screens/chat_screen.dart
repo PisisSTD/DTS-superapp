@@ -3,13 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import '../services/firebase_service.dart';
 import '../models/app_models.dart';
 import 'video_circle_recorder.dart';
 import '../widgets/circle_video_player.dart';
 import '../widgets/voice_message_player.dart';
+import 'call_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final AppUser receiver;
@@ -32,6 +35,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isUploading = false;
   bool _isRecordingVoice = false;
   int _limit = 45;
+  bool _isFetching = false;
 
   @override
   void initState() {
@@ -50,16 +54,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollListener() {
     if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 200) {
-      // Подгружаем еще, когда осталось 200 пикселей до конца (верха чата)
       _loadMore();
     }
   }
 
   void _loadMore() {
+    if (_isFetching) return;
+    _isFetching = true;
     setState(() {
       _limit += 45;
-      _messageStream = _service.getMessages(widget.receiver.uid, limit: _limit);
+      _updateStream();
     });
+    Future.delayed(const Duration(milliseconds: 500), () => _isFetching = false);
   }
 
   @override
@@ -103,6 +109,44 @@ class _ChatScreenState extends State<ChatScreen> {
     if (path != null) _uploadAndSendMedia(File(path), 'voice');
   }
 
+  Future<void> _downloadFile(String url, String type) async {
+    if (Platform.isAndroid) await Permission.storage.request();
+    try {
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
+      } else {
+        dir = await getApplicationDocumentsDirectory();
+      }
+      final String ext = type == 'image' ? 'jpg' : (type == 'video' || type == 'circle' ? 'mp4' : 'file');
+      final savePath = "${dir!.path}/UVZ_Chat_${DateTime.now().millisecondsSinceEpoch}.$ext";
+      await Dio().download(url, savePath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(Platform.isIOS ? 'Сохранено в Файлы' : 'Сохранено: $savePath'), 
+            backgroundColor: Colors.green
+          )
+        );
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка скачивания')));
+    }
+  }
+
+  void _startCall(bool isVideo) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CallScreen(
+          receiverId: widget.receiver.uid,
+          isVideo: isVideo,
+          isIncoming: false,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,6 +167,10 @@ class _ChatScreenState extends State<ChatScreen> {
             );
           },
         ),
+        actions: [
+          IconButton(icon: const Icon(Icons.phone), onPressed: () => _startCall(false)),
+          IconButton(icon: const Icon(Icons.videocam), onPressed: () => _startCall(true)),
+        ],
         backgroundColor: Colors.blueGrey[900],
         foregroundColor: Colors.white,
       ),
@@ -185,6 +233,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(time, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                  if (msg.type != 'text' && msg.type != 'voice') 
+                    IconButton(
+                      icon: const Icon(Icons.download, size: 16), 
+                      onPressed: () => _downloadFile(msg.mediaUrl!, msg.type), 
+                      padding: EdgeInsets.zero, 
+                      constraints: const BoxConstraints()
+                    ),
                   if (isMe) ...[
                     const SizedBox(width: 4),
                     Icon(msg.isRead ? Icons.done_all : Icons.done, size: 14, color: msg.isRead ? Colors.blue : Colors.grey),
